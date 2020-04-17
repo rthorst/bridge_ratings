@@ -68,17 +68,19 @@ for idx, tup in enumerate(distinct_acbl_numbers):
 """
 Merge board_results and pairs table, so that each player is identified by their ACBL number.
 """
-
-#res = conn.execute(merge_board_results_pairs_sql)
-#print(next(res))
+merge_statement = open("sql/merge_board_results_and_pairs_tables.sql", "r").read()
+res = conn.execute(merge_statement)
 
 """
-Calculate ELO ratings based on Atlanta historical data.
+Calculate ELO ratings based on historical data.
 """
-s = "select session_id from session;"
-res = conn.execute(s)
-print(next(res))
-# Foreach hand, do.
+
+# For each hand:
+for ns1_acbl_number, ns2_acbl_number, ew1_acbl_number, ew2_acbl_number, ns_match_points, ew_match_points in res:
+
+    pass
+    # Lookup old elo ratings. ## TODO stopped here.
+    #ns1_elo, ns2_elo, ew1_elo, ew2_elo
 # Lookup all ACBL numbers.
 # Binarize the result: NS win, EW win, draw.
 # Update Elo ratings and put in table.
