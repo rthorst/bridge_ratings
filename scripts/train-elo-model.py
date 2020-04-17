@@ -75,7 +75,9 @@ Merge board_results and pairs table, so that each player is identified by their 
 """
 Calculate ELO ratings based on Atlanta historical data.
 """
-
+s = "select session_id from session;"
+res = conn.execute(s)
+print(next(res))
 # Foreach hand, do.
 # Lookup all ACBL numbers.
 # Binarize the result: NS win, EW win, draw.
