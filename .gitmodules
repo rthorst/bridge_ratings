@@ -1,0 +1,3 @@
+[submodule "scripts/elo"]
+	path = scripts/elo
+	url = https://github.com/sublee/elo.git
