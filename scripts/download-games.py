@@ -10,9 +10,16 @@ import sqlite3
 
 def get_links_to_individual_game_records():
     """
-    Strategy: parse a list of monthly summaries for links to individual
-    game records.
-    """
+    Populates a list of URLs, each with the game summary for a single game.
+    
+    Input: 
+        ../data/club-summary-urls.txt, which for now is manually created.
+        (each URL lists many games)
+
+    Output: 
+        ../data/game-summary-urls.txt  :  one url per line.
+        (each URL is a single game from the above)
+      """
 
     # List website URLs containing club summaries.
     summary_urls = open("../data/club-summary-urls.txt", "r").readlines()
@@ -49,6 +56,14 @@ def get_links_to_individual_game_records():
 
 
 def get_html_of_individual_games():
+    """
+    Download the raw HTML for records of individual club games.
+
+    Input: ../data/game-summary-urls.txt 
+
+    Output: ../data/game_htmls/*
+
+    """
 
     # create output directory if not exists.
     of_p = "../data/game_htmls"
@@ -81,6 +96,18 @@ def get_html_of_individual_games():
     print("done, wrote data/game_htmls/*")
 
 def parse_game_records():
+    """
+    Parse bridge game records into several shared SQL tables
+    stored in ../data/bridge.db
+
+    Tables created:
+        session
+        pairs
+        board_results
+
+    For table schemas, see the create table statements which are exposed
+    below. 
+    """
 
     """
     Create SQL databas and tables. 

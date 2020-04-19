@@ -83,7 +83,6 @@ for ns1_acbl_number, ns2_acbl_number, ew1_acbl_number, ew2_acbl_number, ns_match
 
     # Binarize result. 1 = NS win.
     ns_win = int(ns_matchpoints > ew_matchpoints)
-    print(elo_prediction, mp_prediction, ns_win)
 
     # Record predictions and result.
     elo_predictions.append(elo_prediction)
