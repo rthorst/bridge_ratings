@@ -47,9 +47,11 @@ For each testing example, predict the result based on
 and record the performance.
 """
 elo_predictions = [] # 1 = NS win, 0 = EW win.
-mp_predictions = [] # 1 = NS win, 0 = EW win.
+masterpoint_predictions = [] # 1 = NS win, 0 = EW win.
 true_results = [] # 1 = NP win, 0 = EW win.
-
+elo_diffs = [] # NS - EW.
+masterpoint_diffs = [] # (NS - EW)
+matchpoint_diffs = [] # (NS - EW) / (NS + EW)
 print("Predict X test using MP and ELO")
 counter = 0
 for ns1_acbl_number, ns2_acbl_number, ew1_acbl_number, ew2_acbl_number, ns_matchpoints, ew_matchpoints, session_id in X_test:
@@ -86,21 +88,38 @@ for ns1_acbl_number, ns2_acbl_number, ew1_acbl_number, ew2_acbl_number, ns_match
 
     # Record predictions and result.
     elo_predictions.append(elo_prediction)
-    mp_predictions.append(mp_prediction)
+    masterpoint_predictions.append(mp_prediction)
     true_results.append(ns_win)
+
+    # Also record a few more sensitive statistics.
+    elo_diffs.append(ns_pooled_elo - ew_pooled_elo)
+    masterpoint_diffs.append(ns_pooled_mp - ew_pooled_mp)
+    matchpoint_diffs.append((ns_matchpoints - ew_matchpoints) / (ns_matchpoints + ew_matchpoints))
+
 
 # Output performance of the two models.
 print("score model performance")
-mp_accuracy = accuracy_score(mp_predictions, true_results)
+masterpoint_accuracy = accuracy_score(masterpoint_predictions, true_results)
 elo_accuracy = accuracy_score(elo_predictions, true_results)
 n_test = X_test.shape[0] # TODO adjust to factor that we skipped draws.
 print(np.mean(elo_predictions))
-print(np.mean(mp_predictions))
+print(np.mean(masterpoint_predictions))
 print(np.mean(true_results))
 
 msg = """
 Model accuracy, based on {} test trials:
     - MP: {:.2f} 
     - ELO: {:.2f} 
-""".format(n_test, mp_accuracy, elo_accuracy)
+""".format(n_test, masterpoint_accuracy, elo_accuracy)
+print(msg)
+
+# Experimental, a more sensitive evaluation based on amount of difference in elo, masterpoints, and matchpoints.
+from scipy.stats import spearmanr
+rho_elo, p_elo = spearmanr(elo_diffs, matchpoint_diffs)
+rho_masterpoints, p_masterpoints = spearmanr(masterpoint_diffs, matchpoint_diffs)
+msg = """
+More sensitive analysis using spearman rho of amount of different in ELO or Masterpoints -> amount of difference in matchpoints.
+ELO: rho = {:.2f}
+Masterpoints: rho = {:.2f}
+""".format(rho_elo, rho_masterpoints)
 print(msg)

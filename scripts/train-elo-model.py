@@ -206,4 +206,14 @@ with a mean of {:.2f} and {} total players rated
 print(msg)
 
 
-
+# As an additional eye test, get the ACBL number of the highest
+# rated players.
+select_statement = """
+select acbl_number, elo from elo
+order by elo desc
+limit 20;
+"""
+msg = "Top rated players by elo:\n"
+for acbl_num, player_elo in conn.execute(select_statement):
+    msg += "{} | {}\n".format(acbl_num, player_elo)
+print(msg)
