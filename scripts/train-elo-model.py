@@ -1,44 +1,20 @@
-"""
-Table schema.
-
-------
-session
-------
-session_id  club_name   start_date  board_scoring_method
-
-------
-board_results
-------
-result_id   board_id    section_id  session_id  ns_pair ew_pair ns_match_points ew_match_points
-
-------
-pairs
-------
-pair_id session_id  section_id  pair_number direction   session_percentage  player1_acbl_number player2_acbl_number 
-player1_name player2_name player1_masterpoints player2_masterpoints
-
------
-elo
------
-acbl_number      elo         n_hands
-
-"""
 import sqlite3
 from elo import elo
 import numpy as np
 from sklearn.model_selection import train_test_split
 
 """
-Create ELO table and put every acbl number from pairs in the table with 1200 ELO and 0 hands.
+Create an SQL table, elo, to hold estiamted ELO ratings for each player.
+We initialize each player with a baseline 1200 ELO.
 """
 
-# Connect to database.
+# Connect to existing SQL database: ../data/bridge.db
 conn = sqlite3.connect("../data/bridge.db")
 
-# Drop elo table if exists.
+# If the ELO table already exists, drop it. Create from scratch.
 conn.execute("drop table if exists elo;")
 
-# Create elo table.
+# Create the ELO table.
 create_elo_sql = """
 create table if not exists elo (
     acbl_number integer primary key,
@@ -48,7 +24,8 @@ create table if not exists elo (
 """
 conn.execute(create_elo_sql)
 
-# Get all distinct ACBL numbers in the dataset.
+# List all distinct ACBL numbers in the dataset, in preparation for 
+# assigning these players a baseline 1200 ELO.
 get_distinct_acbl_numbers_sql = """
 select distinct player1_acbl_number from pairs
 union
@@ -56,7 +33,7 @@ select distinct player2_acbl_number from pairs;
 """
 distinct_acbl_numbers = conn.execute(get_distinct_acbl_numbers_sql)
 
-# Initialize all of these players with 0 elo rating.
+# Assign each player a baseline 1200 ELO to start.
 print("initialize all players with 1200 ELO and 0 hands played")
 for idx, tup in enumerate(distinct_acbl_numbers):
 
@@ -72,7 +49,10 @@ for idx, tup in enumerate(distinct_acbl_numbers):
     conn.execute(insert_player_sql)
 
 """
-Merge board_results and pairs table, so that each player is identified by their ACBL number.
+To train the ELO model, we need to associate results of a single board with
+metadata about the players, such as their ACBL number.
+
+Here, we create such a table by merging the pairs and board_results tables.
 """
 
 # Merge board_results and pairs tables.
@@ -93,13 +73,14 @@ X = np.array(X)
 Split training, testing data.
 """
 
-# List all session ids.
+# Since we will split training and testing data by session id, 
+# start by listing all session IDs.
 res = conn.execute("select distinct session_id from session;")
 session_ids = []
 for tup in res:
     session_ids.append(tup[0])
 
-# Train, test, split.
+# Split training and testing data by session ID.
 print("split training, testing data")
 test_size = 0.1
 session_ids_train, session_ids_test = train_test_split(session_ids, 
@@ -111,17 +92,22 @@ X_test = X[test_mask]
 
 print("\t...shapes: train {}, test {}".format(X_train.shape, X_test.shape))
 
-# Persist train, testing data for later.
+# Save training and testing data , for later use.
 print("persist train, test data to ../data/X_train.npy, ../data/X_test.npy")
 np.save("../data/X_train.npy", X_train)
 np.save("../data/X_test.npy", X_test)
 
 """
-Calculate ELO ratings based on historical data.
+Train the ELO model. 
+
+To do this, iterate over hands of historical data (in X_train)
+and update the ELO model after each hand
 """
 
-# Store ELOs in memory, for faster read/write.
-# After all data is processed, we will update the SQL database.
+# Since reading/writing many times to a SQL table is slow, 
+# begin by storing all ELO data in MEMORY.
+# we train the model based on this in-memory ELO table, 
+# then update the resulting ELOs after training
 print("load player elo ratings in memory, for faster read/write")
 res = conn.execute("select acbl_number, elo from elo;")
 acbl_num_to_elo = {}
@@ -134,7 +120,7 @@ n_hands = X_train.shape[0]
 
 for ns1_acbl_number, ns2_acbl_number, ew1_acbl_number, ew2_acbl_number, ns_match_points, ew_match_points, session_id in X_train:
 
-    # Type cast X_train[i], as appropriate.
+    # Ensure all data is of the proper type through explicit casting.
     ns1_acbl_number = int(ns1_acbl_number)
     ns2_acbl_number = int(ns2_acbl_number)
     ew1_acbl_number = int(ew1_acbl_number)
@@ -143,17 +129,16 @@ for ns1_acbl_number, ns2_acbl_number, ew1_acbl_number, ew2_acbl_number, ns_match
     ew_match_points = float(ew_match_points)
     session_id = int(session_id)
     
-    # Counter.
+    # Periodically output progress to the console.
     if counter % 25000 == 0:
 
         # Print counter.
         msg = "update elo for hand {}/{}".format(counter, n_hands)
         print(msg)
 
-    # Update counter.
     counter += 1
 
-    # Look-up the old elo ratings associated with these players.
+    # Query the old ELO ratings associated with these players.
     acbl_numbers = [ns1_acbl_number, ns2_acbl_number, ew1_acbl_number, ew2_acbl_number]
     old_elo_ratings = [] # ns1, ns2, ew1, ew2.
     for acbl_number in acbl_numbers:
@@ -162,11 +147,14 @@ for ns1_acbl_number, ns2_acbl_number, ew1_acbl_number, ew2_acbl_number, ns_match
         old_elo = acbl_num_to_elo[acbl_number]
         old_elo_ratings.append(old_elo)
 
-    # Average elo ratings for NS and EW.
+    # Pool the ELO ratings for each partnership, to get a sense
+    # of partnership strength.
     ns_pooled_elo = (old_elo_ratings[0] + old_elo_ratings[1]) / 2
     ew_pooled_elo = (old_elo_ratings[2] + old_elo_ratings[3]) / 2
 
-    # Calculate new "pooled" elo for NS and EW.
+    # Calculate an update to these pooled ELO ratings, based on 
+    # the result and its surprisingness, given the existing
+    # elo ratings.
     if ns_match_points > ew_match_points: # case 1: NS "win"
         new_ns_pooled_elo, new_ew_pooled_elo = elo.rate_1vs1(ns_pooled_elo, ew_pooled_elo, drawn=False)
     elif ew_match_points > ns_match_points: # case 2: EW "win"
@@ -174,12 +162,10 @@ for ns1_acbl_number, ns2_acbl_number, ew1_acbl_number, ew2_acbl_number, ns_match
     else: # case 3: "draw"
         new_ns_pooled_elo, new_ew_pooled_elo = elo.rate_1vs1(ns_pooled_elo, ew_pooled_elo, drawn=True)
 
-    # Convert this new "pooled" elo for NS and EW into an amount to update.
-    # each individual score, e.g. (new_ew_pooled_elo - ew_pooled_elo)
+    # Vectorize the amount to update each existing ELO rating.
     ew_update = (new_ew_pooled_elo - ew_pooled_elo)
     ns_update = (new_ns_pooled_elo - ns_pooled_elo)
 
-    # Calculate a vector of updates to the old ELO ratings.
     elo_updates = np.array([ns_update, ns_update, ew_update, ew_update])
 
     # Update elo ratings in the ELO lookup dictinary.
@@ -188,9 +174,11 @@ for ns1_acbl_number, ns2_acbl_number, ew1_acbl_number, ew2_acbl_number, ns_match
         acbl_num_to_elo[acbl_number] += elo_update
 
 """
-Update ELO ratings in the ELO table.
+Now that model training is complete, update the SQL-based elo
+table with the new ratings, which for now are simply stored in memory.
 """
-print("alter elo SQL table with new ELO ratings")
+
+print("Update elo table with the new ratings, computed in-memory")
 for acbl_num, player_elo in acbl_num_to_elo.items():
 
     update_statement = """
@@ -199,11 +187,13 @@ for acbl_num, player_elo in acbl_num_to_elo.items():
 
     conn.execute(update_statement)
 
-# Commit changes.
+# Explicitly commit changes to the SQL table, which is necessary to
+# save the changes.
 conn.commit()
 
-# Calculate some descriptive statistics of the ELO ratings,
-# to manually verify the results are reasonable.
+# As an "eye test", output basic descriptive statistics for the 
+# elo ratings as stored in the SQL database. If these look good, 
+# then all was a success.
 test_sql = """
     select min(elo), max(elo), avg(elo), count(*) from elo;
 """
