@@ -27,9 +27,13 @@ conn.execute(create_elo_sql)
 # List all distinct ACBL numbers in the dataset, in preparation for 
 # assigning these players a baseline 1200 ELO.
 get_distinct_acbl_numbers_sql = """
-select distinct player1_acbl_number from pairs
+select distinct ns1_acbl_number from board_results
 union
-select distinct player2_acbl_number from pairs;
+select distinct ns2_acbl_number from board_results
+union
+select distinct ew1_acbl_number from board_results
+union
+select distinct ew2_acbl_number from board_results
 """
 distinct_acbl_numbers = conn.execute(get_distinct_acbl_numbers_sql)
 
@@ -55,15 +59,15 @@ metadata about the players, such as their ACBL number.
 Here, we create such a table by merging the pairs and board_results tables.
 """
 
-# Merge board_results and pairs tables.
-print("load and prepare dataset of played boards")
-merge_statement = open("sql/merge_board_results_and_pairs_tables.sql", "r").read()
-res = conn.execute(merge_statement)
-
-# Cast the merged board_results and pairs tables to a numpy array, X.
-# Shape (nboards, 7)
+# Get dataset.
+# Shape (nboards, 6)
 # Columns: ns1_acbl_number, ns2_acbl_number, ew1_acbl_number, ew2_acbl_number,
-#          ns_match_points, ew_match_points, session_id
+#          ns_match_points, ew_match_points
+select_statement = """
+select ns1_acbl_number, ns2_acbl_number, ew1_acbl_number, ew2_acbl_number, ns_match_points, ew_match_points
+from board_results
+"""
+res = conn.execute(select_statement)
 X = []
 for tup in res:
     X.append(list(tup))
@@ -73,22 +77,10 @@ X = np.array(X)
 Split training, testing data.
 """
 
-# Since we will split training and testing data by session id, 
-# start by listing all session IDs.
-res = conn.execute("select distinct session_id from session;")
-session_ids = []
-for tup in res:
-    session_ids.append(tup[0])
-
-# Split training and testing data by session ID.
+# Split training and testing data, also shuffling the data.
 print("split training, testing data")
 test_size = 0.1
-session_ids_train, session_ids_test = train_test_split(session_ids, 
-        test_size = test_size)
-
-test_mask = np.array([xi in session_ids_test for xi in X[:, 6]])
-X_train = X[~test_mask]
-X_test = X[test_mask]
+X_train, X_test = train_test_split(X, shuffle=True)
 
 print("\t...shapes: train {}, test {}".format(X_train.shape, X_test.shape))
 
@@ -114,16 +106,11 @@ acbl_num_to_elo = {}
 for acbl_num, player_elo in res:
     acbl_num_to_elo[acbl_num] = player_elo
 
-# Randomly shuffle training data, to reduce auto-correlation.
-indices = np.arange(X_train.shape[0])
-np.random.shuffle(indices)
-X_train = X_train[indices]
-
 # Iterate over training data.
 counter = 0
 n_hands = X_train.shape[0]
 
-for ns1_acbl_number, ns2_acbl_number, ew1_acbl_number, ew2_acbl_number, ns_match_points, ew_match_points, session_id in X_train:
+for ns1_acbl_number, ns2_acbl_number, ew1_acbl_number, ew2_acbl_number, ns_match_points, ew_match_points in X_train:
 
     # Ensure all data is of the proper type through explicit casting.
     ns1_acbl_number = int(ns1_acbl_number)
@@ -132,7 +119,6 @@ for ns1_acbl_number, ns2_acbl_number, ew1_acbl_number, ew2_acbl_number, ns_match
     ew2_acbl_number = int(ew2_acbl_number)
     ns_match_points = float(ns_match_points)
     ew_match_points = float(ew_match_points)
-    session_id = int(session_id)
     
     # Periodically output progress to the console.
     if counter % 25000 == 0:
@@ -170,8 +156,11 @@ for ns1_acbl_number, ns2_acbl_number, ew1_acbl_number, ew2_acbl_number, ns_match
     # Vectorize the amount to update each existing ELO rating.
     ew_update = (new_ew_pooled_elo - ew_pooled_elo)
     ns_update = (new_ns_pooled_elo - ns_pooled_elo)
-
     elo_updates = np.array([ns_update, ns_update, ew_update, ew_update])
+
+    # Scale the size of ELO updates (<1 since updates were too large originally)
+    update_scale = 0.2
+    elo_updates = elo_updates * update_scale
 
     # Update elo ratings in the ELO lookup dictinary.
     for acbl_number, elo_update in zip(acbl_numbers, elo_updates):
