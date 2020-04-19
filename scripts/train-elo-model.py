@@ -114,6 +114,11 @@ acbl_num_to_elo = {}
 for acbl_num, player_elo in res:
     acbl_num_to_elo[acbl_num] = player_elo
 
+# Randomly shuffle training data, to reduce auto-correlation.
+indices = np.arange(X_train.shape[0])
+np.random.shuffle(indices)
+X_train = X_train[indices]
+
 # Iterate over training data.
 counter = 0
 n_hands = X_train.shape[0]
