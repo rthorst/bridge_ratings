@@ -4,11 +4,11 @@ Knowing a bridge player's skill is crucial to finding good partners and assignin
 
 # Status
 
-Currently, the repository ranks bridge players using an ELO-based ranking. However, evaluations are showing shockingly low (chance-level) prediction accuracy for this model. It is possible that there is an issue with the dataset, or, that ranking bridge players is more difficult than it appears.
+Currently, the repository ranks bridge players using an ELO-based ranking. However, evaluations show very low prediction accuracy (spearman rho ~= 0.02). Further, the ELO rankings look visually only somewhat reasonable; some of the top players are indeed good players, but some below average players are ranked very highly.
+
 
 # Future Work
 
-Future work should diagnose why the ELO model (which is seemingly a very reasonable model) is predicting performance so poorly. This could be due to issues with the dataset (scripts/download_data.py) or model (scripts/train_elo.py). 
+The most immediate future work should improve the model. My belief is that there are no issues with the code and model; thus, a better model is needed.
 
-The most useful application for this ranking would be a partnership desk tool. Existing partnership desks are very ineffective, using only masterpoints (and usually pen-and-paper) to match players. Creating a web application for a virtual partnership desk, driven by a smarter ranking system, would be very useful.
-
+This also should be developed around a specific application. The most promising would be a virtual "partnership desk," since the largest need for rankings is when people are finding new partners. An ELO-based partnership desk would help people find good partners.
