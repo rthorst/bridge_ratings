@@ -151,9 +151,9 @@ def parse_game_records():
             # for the ELO model to learn to down-rank limited flight players, due to 
             # sectioning of players in certain games. Thus low rank players could gain an
             # unreasonably high elo by never leaving non-open games.
-            #if not 'open pairs' in game_html.lower():
-            #    print("skip {} which is not open pairs".format(html_p))
-            #    continue
+            if not 'open pairs' in game_html.lower():
+                print("skip {} which is not open pairs".format(html_p))
+                continue
 
             # Extract data object.
             script_with_data_tag = soup.findAll("script")[-2]
